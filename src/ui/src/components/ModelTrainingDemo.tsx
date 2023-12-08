@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, ChangeEvent } from 'react';
 import {
   Grid, Typography, Tabs, Tab, FormControl, InputLabel, Select, MenuItem, Button,
   TextField, Autocomplete, Box, Switch, FormControlLabel, Paper, TableContainer, Table, TableHead, TableBody, TableRow, TableCell
@@ -11,6 +11,8 @@ import 'react-datepicker/dist/react-datepicker.css';
 import SocketManager from '../utility/SocketManager';
 import { useApiCall } from '../hooks/useApiCall';
 import { APIProxy } from '../utility/apiProxy';
+import { SelectChangeEvent } from '@mui/material';
+
 // Define interfaces for props
 interface StyledDateInputProps {
   value: string;
@@ -62,6 +64,7 @@ const StyledDateInputWrapper = styled('div')(({ theme }) => ({
   },
 }));
 
+
 // Functional component to handle logic
 const StyledDateInput = ({ value, onClick }: StyledDateInputProps) => (
   <StyledDateInputWrapper>
@@ -77,6 +80,16 @@ const App = () => {
     id: string;
     name: string;
   }
+  interface OptimizerParameter {
+    description: string;
+    default: string; // Adjust the type according to your data
+  }
+  
+  interface OptimizerParams {
+    [paramName: string]: OptimizerParameter;
+  }
+  
+  const [optimizerParamsState, setOptimizerParamsState] = useState<OptimizerParams>({});
   
   const [models, setModels] = useState<SelectOption[]>([]);
   const [optimizers, setOptimizers] = useState<SelectOption[]>([]);
@@ -85,7 +98,10 @@ const App = () => {
   const [selectedStocks, setSelectedStocks] = useState<string[]>([]);
   const [currentStockTab, setCurrentStockTab] = useState<number>(0);
   const [stockConfig, setStockConfig] = useState<{[key: string]: any}>({});
-  const [serverFeedback, setServerFeedback] = useState('');
+  const [isTraining, setIsTraining] = useState(false); // State to track if training is in progress
+  const [isLoading, setIsLoading] = useState(false); // State to track loading status
+  const [serverFeedback, setServerFeedback] = useState(''); // State to store server feedback messages
+  
   const [configErrors, setConfigErrors] = useState({});
   const [predictionResults, setPredictionResults] = useState<StockPredictionResults>({});
   const today = new Date();
@@ -93,21 +109,46 @@ const App = () => {
   const apiProxyInstance = new APIProxy();
   const apiCall = useApiCall(apiProxyInstance.fetchEndpoint);
 
+  const getStartDate = () => {
+    const startDate = stockConfig[selectedStocks[currentStockTab]]?.startDate;
+    if (startDate) {
+        return new Date(startDate); // Convert to Date object if it's a string
+    }
+    return new Date(); // Default to current date if undefined
+  };
+  
+  const startDateValue = getStartDate();
+
+  useEffect(() => {
+    console.log("Current configErrors:", configErrors);
+  }, [configErrors]);
+  
+
+  const getEndDate = () => {
+    const endDate = stockConfig[selectedStocks[currentStockTab]]?.endDate;
+    if (endDate) {
+        return new Date(endDate); // Convert to Date object if it's a string
+    }
+    return new Date(); // Default to current date if undefined
+  };
+  
+  const endDateValue = getEndDate();
+
   interface ConfigErrors {
     [key: string]: string;
   }
   
 // Validation function
 const validateConfig = () => {
-  let errors: ConfigErrors = {};
+  let errors: ConfigErrors = { ...configErrors };
   selectedStocks.forEach(stock => {
-    const config = stockConfig[stock];
-    if (!config.startDate) {
-      errors[`${stock}-startDate`] = 'Start date is required';
-    }
-    if (!config.endDate) {
-      errors[`${stock}-endDate`] = 'End date is required';
-    }
+      const config = stockConfig[stock];
+      if (!config.startDate) {
+          errors[`${stock}-startDate`] = 'Start date is required';
+      }
+      if (!config.endDate) {
+          errors[`${stock}-endDate`] = 'End date is required';
+      }
     if (!config.Model) {
       errors[`${stock}-Model`] = 'Model selection is required';
     }
@@ -140,7 +181,30 @@ const fetchModels = async () => {
   }
 };
 
-  
+const [optimizerParams, setOptimizerParams] = useState<{[optimizerName: string]: OptimizerParams}>({});
+const [selectedOptimizerParams, setSelectedOptimizerParams] = useState<OptimizerParams>({});
+
+
+// Fetch optimizer parameters
+const fetchOptimizerParams = async () => {
+    try {
+        const response = await apiCall.call('/fetch_optimizer_params');
+        if (response) {
+            setOptimizerParams(response);
+        } else {
+            // Handle no response
+            setOptimizerParams({});
+        }
+    } catch (error) {
+        console.error('Error fetching optimizer parameters:', error);
+    }
+};
+const handleOptimizerChange = (event: SelectChangeEvent) => {
+  const selectedOptimizer = event.target.value as string; // Typecasting to string
+  updateConfig('Optimizer', selectedOptimizer);
+  setSelectedOptimizerParams(optimizerParams[selectedOptimizer] || {});
+};
+ 
   
   const fetchOptimizers = async () => {
     try {
@@ -192,26 +256,43 @@ const fetchModels = async () => {
     return config && Array.isArray(config.Model) && config.Model.length > 0 && config.Optimizer && config['Voting Strategy'];
   };
   
-
   const handleStartDateChange = (date: Date | null) => {
     if (date) {
-      updateConfig('startDate', date);
-      if (date > new Date(stockConfig[selectedStocks[currentStockTab]]?.endDate || new Date())) {
-        updateConfig('endDate', date);
-      }
+      updateConfig('startDate', date.toISOString());
+      // Remove start date error if date is valid
+      setConfigErrors(prevErrors => {
+        const updatedErrors = { ...prevErrors };
+        delete updatedErrors[`${selectedStocks[currentStockTab]}-startDate`];
+        return updatedErrors;
+      });
+    } else {
+      // Set start date error if no date is selected
+      setConfigErrors(prevErrors => ({ ...prevErrors, [`${selectedStocks[currentStockTab]}-startDate`]: 'Start date is required' }));
     }
   };
-
+  
   const handleEndDateChange = (date: Date | null) => {
-    if (date && date <= new Date() && date >= new Date(stockConfig[selectedStocks[currentStockTab]]?.startDate || new Date())) {
-      updateConfig('endDate', date);
+    if (date) {
+      updateConfig('endDate', date.toISOString());
+      // Remove end date error if date is valid
+      setConfigErrors(prevErrors => {
+        const updatedErrors = { ...prevErrors };
+        delete updatedErrors[`${selectedStocks[currentStockTab]}-endDate`];
+        return updatedErrors;
+      });
+    } else {
+      // Set end date error if no date is selected
+      setConfigErrors(prevErrors => ({ ...prevErrors, [`${selectedStocks[currentStockTab]}-endDate`]: 'End date is required' }));
     }
   };
+  
+
 
   useEffect(() => {
     fetchModels();
     fetchOptimizers();
     fetchVotingStrategies();
+    fetchOptimizerParams();
   }, []);
   
   const socketManager = SocketManager.getInstance();
@@ -233,12 +314,13 @@ type StockPredictionResults = {
     [key: string]: StockPredictionResult;
 };
 
-
   useEffect(() => {  
       socketManager.connect();
       socketManager.on('connect', () => console.log('Connected to server'));
       
       socketManager.on('training_complete', (data) => {
+        setIsTraining(false);
+        setIsLoading(false); // 
         const updatedResults: { [key: string]: StockPredictionResult } = { ...predictionResults };
         console.log(data);
         if (data.predictions && Array.isArray(data.predictions)) {
@@ -251,14 +333,12 @@ type StockPredictionResults = {
         }
     });
     
-    
-    
-      socketManager.on('training_error', (error) => {
-          console.error('Training error:', error);
-         // setIsTraining(false);
-         // setIsLoading(false);
-         // setServerFeedback(error.message || 'Error during training.');
-      });
+    socketManager.on('training_error', (error) => {
+      console.error('Training error:', error);
+      setIsTraining(false); // Stop the training status
+      setIsLoading(false); // Stop the loading status
+      setServerFeedback(error.message || 'Error during training.'); // Set error message
+  });
       socketManager.on('progress', (data) => {
           console.log('Training progress:', data);
           //setProgress(data.percentage);
@@ -271,8 +351,8 @@ type StockPredictionResults = {
 
   const startTraining = () => {
     if (!validateConfig()) return;
-    //  setIsTraining(true);
-     // setIsLoading(true);
+    setIsTraining(true);
+    setIsLoading(true); // Start loading
      console.log("in");
      const trainingData = selectedStocks.map(stock => ({
       symbol: stock,
@@ -283,6 +363,13 @@ type StockPredictionResults = {
   };
   return (
     <Grid container spacing={3}>
+         {isLoading && (
+            <Grid item xs={12}>
+                <Paper style={{ padding: '16px', textAlign: 'center' }}>
+                    <Typography variant="h6">Processing, please wait...</Typography>
+                </Paper>
+            </Grid>
+        )}
       <Grid item xs={12}>
         <Typography variant="h4" gutterBottom>Stock Analysis Configuration</Typography>
         <Paper style={{ padding: '16px', backgroundColor: '#f9f9f9' }}>
@@ -319,35 +406,42 @@ type StockPredictionResults = {
             <Box mt={2}>
             <FormControl fullWidth>
               <InputLabel>Start Date</InputLabel>
-              <StyledDatePicker
-                selected={new Date(stockConfig[selectedStocks[currentStockTab]]?.startDate || new Date())}
-                onChange={handleStartDateChange}
-                dateFormat="dd/MM/yyyy"
-                maxDate={today} // Set the max date to today
-                showYearDropdown
-                showMonthDropdown
-                customInput={<StyledDateInput value={(stockConfig[selectedStocks[currentStockTab]]?.startDate || new Date()).toDateString()} onClick={() => {}} />}
-                popperPlacement="top-end"
-              />
+                      <StyledDatePicker
+              selected={startDateValue}
+              onChange={handleStartDateChange}
+              dateFormat="dd/MM/yyyy"
+              maxDate={today}
+              showYearDropdown
+              showMonthDropdown
+              customInput={<StyledDateInput value={startDateValue.toDateString()} onClick={() => {}} />}
+              popperPlacement="top-end"
+/>
+              
             </FormControl>
           </Box>
           <Box mt={2}>
             <FormControl fullWidth>
               <InputLabel>End Date</InputLabel>
               <StyledDatePicker
-                selected={new Date(stockConfig[selectedStocks[currentStockTab]]?.endDate || new Date())}
-                onChange={handleEndDateChange}
-                dateFormat="dd/MM/yyyy"
-                maxDate={today} // Set the max date to today
-                showYearDropdown
-                showMonthDropdown
-                customInput={<StyledDateInput value={(stockConfig[selectedStocks[currentStockTab]]?.endDate || new Date()).toDateString()} onClick={() => {}} />}
-                popperPlacement="top-end"
-              />
+              selected={endDateValue}
+              onChange={handleEndDateChange}
+              dateFormat="dd/MM/yyyy"
+              maxDate={today}
+              showYearDropdown
+              showMonthDropdown
+              customInput={<StyledDateInput value={endDateValue.toDateString()} onClick={() => {}} />}
+              popperPlacement="top-end"
+/>
             </FormControl>
             </Box>
           
-
+            {serverFeedback && (
+            <Grid item xs={12}>
+                <Paper style={{ padding: '16px', backgroundColor: '#ffcccc' }}> {/* Adjust styling as needed */}
+                    <Typography variant="body1" color="error">{serverFeedback}</Typography>
+                </Paper>
+            </Grid>
+        )}
           {!advancedMode && (
           <FormControl fullWidth variant="outlined">
           <InputLabel htmlFor="model-select">Model</InputLabel>
@@ -379,38 +473,55 @@ type StockPredictionResults = {
           </Select>
         </FormControl>
       )}
-
-          <FormControl fullWidth variant="outlined">
+      {advancedMode && (
+            <Grid item xs={12}>
+            <FormControl fullWidth variant="outlined">
             <InputLabel htmlFor="optimizer-select">Optimizer</InputLabel>
             <Select
-              id="optimizer-select"
-              value={stockConfig[selectedStocks[currentStockTab]]?.Optimizer || ''}
-              onChange={(e) => updateConfig('Optimizer', e.target.value)}
+                id="optimizer-select"
+                value={stockConfig[selectedStocks[currentStockTab]]?.Optimizer || ''}
+                onChange={handleOptimizerChange}
             >
-              {optimizers.map(optimizer => (
-                <MenuItem key={optimizer.id} value={optimizer.name}>{optimizer.name}</MenuItem>
-              ))}
+                {optimizers.map(optimizer => (
+                    <MenuItem key={optimizer.id} value={optimizer.name}>{optimizer.name}</MenuItem>
+                ))}
             </Select>
-          </FormControl>
+        </FormControl>
 
-          <FormControl fullWidth variant="outlined">
-            <InputLabel htmlFor="voting-strategy-select">Voting Strategy</InputLabel>
-            <Select
-              id="voting-strategy-select"
-              value={stockConfig[selectedStocks[currentStockTab]]?.['Voting Strategy'] || ''}
-              onChange={(e) => updateConfig('Voting Strategy', e.target.value)}
-            >
-              {votingStrategies.map(strategy => (
-                <MenuItem key={strategy.id} value={strategy.name}>{strategy.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-            {/* Advanced Mode Configuration Here */}
-            <Box mt={3}>
-              <Button variant="contained" color="primary" disabled={Object.keys(configErrors).length > 0} onClick={startTraining}>Submit Configurations</Button>
-            </Box>
-          </Paper>
-          {
+        {/* Display editable fields for selected optimizer's parameters */}
+          {Object.entries(selectedOptimizerParams).map(([param, info]) => (
+              <TextField
+                key={param}
+                label={param}
+                helperText={info.description}
+                defaultValue={info.default}
+                fullWidth
+                margin="normal"
+                // Add onChange handler if needed
+              />
+            ))}
+
+          </Grid>
+      )}        
+
+      <FormControl fullWidth variant="outlined">
+        <InputLabel htmlFor="voting-strategy-select">Voting Strategy</InputLabel>
+        <Select
+          id="voting-strategy-select"
+          value={stockConfig[selectedStocks[currentStockTab]]?.['Voting Strategy'] || ''}
+          onChange={(e) => updateConfig('Voting Strategy', e.target.value)}
+        >
+          {votingStrategies.map(strategy => (
+            <MenuItem key={strategy.id} value={strategy.name}>{strategy.name}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+        {/* Advanced Mode Configuration Here */}
+        <Box mt={3}>
+          <Button variant="contained" color="primary" disabled={Object.keys(configErrors).length > 0} onClick={startTraining}>Submit Configurations</Button>
+        </Box>
+      </Paper>
+      {
    
     selectedStocks.length > 0 && (
         <Grid item xs={12}>
@@ -466,8 +577,6 @@ type StockPredictionResults = {
         </Grid>
     )
   }
-
-
 
         </Grid>
         
