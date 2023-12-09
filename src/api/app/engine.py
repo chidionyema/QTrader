@@ -1,6 +1,5 @@
 
 from abc import ABC, abstractmethod
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
 from datetime import datetime, timedelta
 import concurrent.futures
@@ -16,6 +15,29 @@ from concurrent.futures import ThreadPoolExecutor
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_percentage_error
 from xgboost import XGBClassifier
 from sklearn.metrics import mean_absolute_error
+from pyswarm import pso
+from scipy.optimize import minimize
+from abc import ABC, abstractmethod
+from collections import Counter, defaultdict
+
+from sklearn.model_selection import RandomizedSearchCV
+from skopt import BayesSearchCV
+# Import necessary libraries
+from abc import ABC, abstractmethod
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor, RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.svm import SVR, SVC
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet, BayesianRidge, ARDRegression, SGDRegressor, PassiveAggressiveRegressor, HuberRegressor, TheilSenRegressor, RANSACRegressor, OrthogonalMatchingPursuit, Lars, LassoLars
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.mixture import GaussianMixture
+import numpy as np
+from sklearn.neighbors import KNeighborsClassifier  # Import here to avoid circular dependency
+from sklearn.neural_network import MLPClassifier  # Example with Multi-layer Perceptron classifier
 
 # Define classes and functions you want to expose
 __all__ = [
@@ -60,29 +82,6 @@ __all__ = [
     'TrainingCoordinator',
     # Add more as needed...
 ]
-from abc import ABC, abstractmethod
-from collections import Counter, defaultdict
-
-from sklearn.model_selection import RandomizedSearchCV
-from skopt import BayesSearchCV
-
-
-
-
-# Import necessary libraries
-from abc import ABC, abstractmethod
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor, RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
-from sklearn.svm import SVR, SVC
-from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet, BayesianRidge, ARDRegression, SGDRegressor, PassiveAggressiveRegressor, HuberRegressor, TheilSenRegressor, RANSACRegressor, OrthogonalMatchingPursuit, Lars, LassoLars
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.linear_model import LogisticRegression
-from statsmodels.tsa.arima.model import ARIMA
-from sklearn.mixture import GaussianMixture
-import numpy as np
 
 # BaseModel class
 class BaseModel(ABC):
@@ -119,7 +118,6 @@ class AdaBoostRegressorModel(BaseModel):
     def train(self, X_train, y_train):
         self.algorithm_instance.fit(X_train, y_train)
 
-# ... (continue for other regression models)
 
 class RandomForestClassifierModel(BaseModel):
     def __init__(self, params=None):
@@ -142,16 +140,12 @@ class GradientBoostingClassifierModel(BaseModel):
     def train(self, X_train, y_train):
         self.algorithm_instance.fit(X_train, y_train)
 
-# ... (continue for other classification models)
-
 class KMeansModel(BaseModel):
     def __init__(self, params=None):
         super().__init__("KMeans", KMeans(**(params or {})))
 
     def train(self, X_train, y_train=None):
         self.algorithm_instance.fit(X_train)
-
-# ... (continue for other clustering and dimensionality reduction models)
 
 class PCAModel(BaseModel):
     def __init__(self, params=None):
@@ -176,9 +170,6 @@ class ARIMAModel(BaseModel):
     def train(self, X_train, y_train=None):
         self.algorithm_instance = self.algorithm_instance.fit(X_train)
 
-# ... (previous imports and BaseModel definition)
-
-# Define classes for additional models as per your mapping
 class SVMModel(BaseModel):
     def __init__(self, params=None):
         super().__init__("SVM", SVC(**(params or {})))
@@ -195,7 +186,6 @@ class LogRegModel(BaseModel):
 
 class KNNModel(BaseModel):
     def __init__(self, params=None):
-        from sklearn.neighbors import KNeighborsClassifier  # Import here to avoid circular dependency
         super().__init__("KNN", KNeighborsClassifier(**(params or {})))
 
     def train(self, X_train, y_train):
@@ -203,7 +193,6 @@ class KNNModel(BaseModel):
 
 class NeuralNetworkModel(BaseModel):
     def __init__(self, params=None):
-        from sklearn.neural_network import MLPClassifier  # Example with Multi-layer Perceptron classifier
         super().__init__("NeuralNetwork", MLPClassifier(**(params or {})))
 
     def train(self, X_train, y_train):
@@ -216,10 +205,6 @@ class XGBoostModel(BaseModel):
 
     def train(self, X_train, y_train):
         self.algorithm_instance.fit(X_train, y_train)
-
-# ... (include the previous RandomForestRegressorModel, GradientBoostingRegressorModel, etc.)
-
-# Continue with other models like KMeansModel, PCAModel, GaussianMixtureModel, ARIMAModel as before
 
 # ... (other models)
 
@@ -245,30 +230,36 @@ class OptimizerFactory:
         :param kwargs: Additional keyword arguments specific to each optimizer.
         :return: An instance of the requested optimizer.
         """
-        if optimizer_name == "GridSearch":
-            return GridSearchOptimizer(**kwargs)
+
+        if optimizer_name == "GridSearchOptimizer":
+            return GridSearchOptimizer(param_grid=kwargs.get('param_grid', {}))
         elif optimizer_name == "RandomSearchOptimizer":
-            return RandomSearchOptimizer(**kwargs)
+            return RandomSearchOptimizer(param_distributions=kwargs.get('param_distributions', {}),
+                                         n_iter=kwargs.get('n_iter', 100))
         elif optimizer_name == "BayesianOptimizer":
-            return BayesianOptimizer(**kwargs)
+            return BayesianOptimizer(param_space=kwargs.get('param_space', {}),
+                                     n_iter=kwargs.get('n_iter', 50))
+        # Add similar elif blocks for other optimizers with their specific parameters
         elif optimizer_name == "PSOOptimizer":
+            # Add required parameters for PSOOptimizer
             return PSOOptimizer(**kwargs)
         elif optimizer_name == "SimulatedAnnealingOptimizer":
+            # Add required parameters for SimulatedAnnealingOptimizer
             return SimulatedAnnealingOptimizer(**kwargs)
         elif optimizer_name == "TPEOptimizer":
-            return TPEOptimizer(**kwargs)
+            return TPEOptimizer(space=kwargs.get('space', {}))
         elif optimizer_name == "OptunaCMAESOptimizer":
-            return OptunaCMAESOptimizer(**kwargs)
+            return OptunaCMAESOptimizer(objective_function=kwargs.get('objective_function'))
         elif optimizer_name == "DEAPGAOptimizer":
-            return DEAPGAOptimizer(**kwargs)
+            return DEAPGAOptimizer(objective_function=kwargs.get('objective_function'),
+                                   toolbox=kwargs.get('toolbox'))
         elif optimizer_name == "OptunaTPEOptimizer":
-            return OptunaTPEOptimizer(**kwargs)
+            return OptunaTPEOptimizer(objective_function=kwargs.get('objective_function'))
         else:
             raise ValueError(f"Optimizer '{optimizer_name}' not recognized.")
 
+
 # Example usage
-
-
 
 
 class RandomForest(BaseModel):
@@ -283,9 +274,6 @@ class RandomForest(BaseModel):
 
     def train(self, X_train, y_train):
         self.algorithm_instance.fit(X_train, y_train)
-
-
-
 
 
 class GridSearchOptimizer(Optimizer):
@@ -317,8 +305,6 @@ class BayesianOptimizer(Optimizer):
         bayes_search.fit(X_train, y_train)
         model.algorithm_instance = bayes_search.best_estimator_
 
-from pyswarm import pso
-from scipy.optimize import minimize
 
 class PSOOptimizer(Optimizer):
     def optimize(self, model, X_train, y_train):
@@ -438,7 +424,7 @@ class GBM(BaseModel):
 
 from sklearn.linear_model import LogisticRegression
 
-class LogReg(BaseModel):
+class LogisticRegressionModel(BaseModel):
     def __init__(self, params=None):
         super().__init__("LogReg", LogisticRegression(**params if params else {}))
 
@@ -714,66 +700,102 @@ class AverageStrategy(EnsembleStrategy):
         return sum(flattened_predictions) / len(flattened_predictions)
     
 
-class MappingLayer:
-    models_mapping = {
-        "RandomForestRegressor": RandomForestRegressorModel,
-        "GradientBoostingRegressor": GradientBoostingRegressorModel,
-        "AdaBoostRegressor": AdaBoostRegressorModel,
-        "RandomForestClassifier": RandomForestClassifierModel,
-        "AdaBoostClassifier": AdaBoostClassifierModel,
-        "GradientBoostingClassifier": GradientBoostingClassifierModel,
-        "KMeans": KMeansModel,
-        "PCA": PCAModel,
-        "SVR": SVRModel,
-        "SVC": SVCModel,
-        "LinearRegression": LinearRegressionModel,
-        "RidgeRegression": RidgeRegressionModel,
-        "LassoRegression": LassoRegressionModel,
-        "ElasticNetRegression": ElasticNetRegressionModel,
-        "BayesianRidgeRegression": BayesianRidgeRegressionModel,
-        "ARDRegression": ARDRegressionModel,
-        "SGDRegressor": SGDRegressorModel,
-        "PassiveAggressiveRegressor": PassiveAggressiveRegressorModel,
-        "HuberRegressor": HuberRegressorModel,
-        "TheilSenRegressor": TheilSenRegressorModel,
-        "RANSACRegressor": RANSACRegressorModel,
-        "OrthogonalMatchingPursuit": OrthogonalMatchingPursuitModel,
-        "Lars": LarsModel,
-        "LassoLars": LassoLarsModel,
-        "KNeighborsRegressor": KNeighborsRegressorModel,
-        "DecisionTreeRegressor": DecisionTreeRegressorModel,
-        "DecisionTreeClassifier": DecisionTreeClassifierModel,
-        "LogisticRegressionClassifier": LogisticRegressionClassifierModel,
-        "GaussianNaiveBayes": GaussianNaiveBayesModel,
-        "GaussianHMM": GaussianMixtureModel,
-        "ARIMA": ARIMAModel,
-        # Add any additional models here
-    }
-
-
-    optimizers_mapping = {
-    "RandomSearch": RandomSearchOptimizer,
-    "BayesianOptimizer": BayesianOptimizer,
-    "PSO": PSOOptimizer,
-    "SimulatedAnnealing": SimulatedAnnealingOptimizer,
-    "TPE": TPEOptimizer,
-    "OptunaCMAES": OptunaCMAESOptimizer,
-    "DEAPGA": DEAPGAOptimizer,
-    "OptunaTPE": OptunaTPEOptimizer,
-    # Add other optimizers here
-    }
-
-    ensemble_strategies_mapping = {
-    "ThresholdVoting": ThresholdVotingStrategy,
-    "BordaCount": BordaCountStrategy,
-    "SoftVoting": SoftVotingStrategy,
-    "MaxVoting": MaxVotingStrategy,
-    "MinVoting": MinVotingStrategy,
-    "Product": ProductStrategy,
-    "RankAveraging": RankAveragingStrategy,
-    "MajorityVote": MajorityVoteStrategy,
-# "Average": AverageStrategy,
-    # Add other strategies here
+MODEL_REGISTRY = {
+    'RandomForestRegressor': {
+        'class': RandomForestRegressorModel,
+        'param_grid': {'n_estimators': [100, 200], 'max_depth': [5, 10, None]},
+        'optimizer_type': 'RandomSearchOptimizer'
+    },
+    'DecisionTreeRegressor': {
+        'class': DecisionTreeRegressorModel,
+        'param_grid': {'max_depth': [5, 10, None], 'min_samples_split': [2, 5, 10]},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'SVR': {
+        'class': SVRModel,
+        'param_grid': {'C': [0.1, 1, 10], 'gamma': ['scale', 'auto']},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'GradientBoostingRegressor': {
+        'class': GradientBoostingRegressorModel,
+        'param_grid': {'n_estimators': [100, 200], 'learning_rate': [0.01, 0.1], 'max_depth': [3, 5, 7]},
+        'optimizer_type': 'RandomSearchOptimizer'
+    },
+    'AdaBoostRegressor': {
+        'class': AdaBoostRegressorModel,
+        'param_grid': {'n_estimators': [50, 100], 'learning_rate': [0.01, 0.1]},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'LinearRegression': {
+        'class': LinearRegressionModel,
+        'param_grid': {},  # Linear Regression typically does not need hyperparameter tuning
+        'optimizer_type': None
+    },
+    'LogisticRegression': {
+        'class': LogisticRegressionModel,
+        'param_grid': {'C': [0.1, 1, 10], 'penalty': ['l2']},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'KNeighborsRegressor': {
+        'class': KNeighborsRegressorModel,
+        'param_grid': {'n_neighbors': [3, 5, 7], 'weights': ['uniform', 'distance']},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'RidgeRegression': {
+        'class': RidgeRegressionModel,
+        'param_grid': {'alpha': [0.1, 1, 10]},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'LassoRegression': {
+        'class': LassoRegressionModel,
+        'param_grid': {'alpha': [0.1, 1, 10]},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'ElasticNetRegression': {
+        'class': ElasticNetRegressionModel,
+        'param_grid': {'alpha': [0.1, 1, 10], 'l1_ratio': [0.2, 0.5, 0.8]},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'SGDRegressor': {
+        'class': SGDRegressorModel,
+        'param_grid': {'penalty': ['l2', 'l1', 'elasticnet'], 'alpha': [0.0001, 0.001, 0.01]},
+        'optimizer_type': 'RandomSearchOptimizer'
+    },
+    #'XGBoostRegressor': {
+      #  'class': XGBRegressor,
+      #  'param_grid': {'n_estimators': [100, 200], 'max_depth': [3, 5, 7], 'learning_rate': [0.01, 0.1]},
+      #  'optimizer_type': 'RandomSearch'
+  #  },
+    'RandomForestClassifier': {
+        'class': RandomForestClassifierModel,
+        'param_grid': {'n_estimators': [100, 200], 'max_depth': [5, 10, None]},
+        'optimizer_type': 'RandomSearchOptimizer'
+    },
+    'GradientBoostingClassifier': {
+        'class': GradientBoostingClassifierModel,
+        'param_grid': {'n_estimators': [100, 200], 'learning_rate': [0.01, 0.1], 'max_depth': [3, 5, 7]},
+        'optimizer_type': 'RandomSearchOptimizer'
+    },
+    'AdaBoostClassifier': {
+        'class': AdaBoostClassifierModel,
+        'param_grid': {'n_estimators': [50, 100], 'learning_rate': [0.01, 0.1]},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'SVMClassifier': {
+        'class': SVCModel,
+        'param_grid': {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf', 'poly']},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'KNeighborsClassifier': {
+        'class': KNNModel,
+        'param_grid': {'n_neighbors': [3, 5, 7], 'weights': ['uniform', 'distance']},
+        'optimizer_type': 'GridSearchOptimizer'
+    },
+    'GaussianNaiveBayes': {
+        'class': GaussianMixtureModel,
+        'param_grid': {},  # GaussianNB typically does not require hyperparameter tuning
+        'optimizer_type': None
+    },
 }
 
 class DataLoader:
@@ -880,88 +902,162 @@ class DataPreparation:
     LOOKBACK_PERIOD = 14
     PREDICTION_PERIOD = 3
 
-    def __init__(self, dataset):
+    def __init__(self, dataset, indicators):
         self.dataset = dataset
-        self.calculate_technical_indicators()  # Calculate technical indicators once
+        self.indicators = indicators  # List of tuples, e.g., [('SMA', 14), ('EMA', 10)]
+        self.calculate_technical_indicators()
 
-    @staticmethod
-    def calculate_sma(data, window):
-        """
-        Calculate the Simple Moving Average (SMA) for a given window.
-
-        :param data: Input data as a Pandas DataFrame.
-        :param window: Window size for SMA calculation.
-        :return: Series containing the SMA values.
-        """
-        print(f"Calculating SMA with a window of {window}...")
-        # Use min_periods to handle NaN values
+    def calculate_sma(self, data, window):
         return data['Close'].rolling(window=window, min_periods=1).mean()
 
-    def calculate_technical_indicators(self):
-        print("Calculating technical indicators...")
-        self.dataset['SMA'] = self.calculate_sma(self.dataset, self.LOOKBACK_PERIOD)
-        # You can add more technical indicators here
+    def calculate_ema(self, data, window):
+        return data['Close'].ewm(span=window, adjust=False).mean()
     
+    def calculate_rsi(self, data, period=14):
+        delta = data['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+
+    def calculate_macd(self, data, short_period=12, long_period=26, signal_period=9):
+        short_ema = data['Close'].ewm(span=short_period, adjust=False).mean()
+        long_ema = data['Close'].ewm(span=long_period, adjust=False).mean()
+        macd = short_ema - long_ema
+        signal = macd.ewm(span=signal_period, adjust=False).mean()
+        return macd, signal
+
+    def calculate_bollinger_bands(self, data, period=20, std_dev=2):
+        sma = data['Close'].rolling(window=period).mean()
+        rstd = data['Close'].rolling(window=period).std()
+        upper_band = sma + std_dev * rstd
+        lower_band = sma - std_dev * rstd
+        return upper_band, lower_band
+
+    def calculate_technical_indicators(self):
+        for indicator_name, params in self.indicators:
+            if indicator_name == 'SMA':
+                self.dataset[f'{indicator_name}_{params}'] = self.calculate_sma(self.dataset, params)
+            elif indicator_name == 'EMA':
+                self.dataset[f'{indicator_name}_{params}'] = self.calculate_ema(self.dataset, params)
+            elif indicator_name == 'RSI':
+                self.dataset[f'{indicator_name}_{params}'] = self.calculate_rsi(self.dataset, params)
+            elif indicator_name == 'MACD':
+                macd, signal = self.calculate_macd(self.dataset, *params)
+                self.dataset[f'MACD_{params}'] = macd
+                self.dataset[f'MACDSignal_{params}'] = signal
+            elif indicator_name == 'Bollinger':
+                upper_band, lower_band = self.calculate_bollinger_bands(self.dataset, *params)
+                self.dataset[f'BollingerUpper_{params}'] = upper_band
+                self.dataset[f'BollingerLower_{params}'] = lower_band
+            # Add conditions for other indicators here...
+
     def process_day(self, i):
         try:
             current_date = self.dataset.iloc[i]['Date']
-
-            # Extract the historical data (past x days) and future data (next y days)
-            historical_data = self.dataset.iloc[i - self.LOOKBACK_PERIOD:i + 1]  # Include current day
+            historical_data = self.dataset.iloc[i - self.LOOKBACK_PERIOD:i + 1]
 
             if len(historical_data) < self.LOOKBACK_PERIOD + 1:
-                # Not enough historical data for this day, skip processing
                 return None
 
             future_data = self.dataset.iloc[i:i + self.PREDICTION_PERIOD]
-
-            # Sort historical data by date in descending order (most recent first)
             historical_data = historical_data.sort_values(by='Date', ascending=False)
-
-            # Extract the SMA values for historical data
-            historical_sma_dates = historical_data['Date'].astype(str).tolist()  # Convert datetime to string
-            historical_sma_values = historical_data['SMA'].tolist()
-
-            # Sort future data by date in ascending order (future dates first)
             future_data = future_data.sort_values(by='Date')
 
-            # Extract the closing prices for the future data
-            future_closing_dates = future_data['Date'].astype(str).tolist()  # Convert datetime to string
-            future_closing_prices = future_data['Close'].tolist()
+            # Prepare the historical and future data entries
+            historical_entries = []
+            for idx, row in historical_data.iterrows():
+                entry = {
+                    'Date': row['Date'].strftime("%Y-%m-%d"),
+                    'Open': row['Open'],
+                    'High': row['High'],
+                    'Low': row['Low'],
+                    'Volume': row['Volume'],
+                    'Close': row['Close']
+                }
+                # Add technical indicators to the entry
+                for indicator_name, params in self.indicators:
+                    if indicator_name in ['SMA', 'EMA', 'RSI']:
+                        entry[f'{indicator_name}_{params}'] = row[f'{indicator_name}_{params}']
+                    elif indicator_name == 'MACD':
+                        entry[f'MACD_{params}'] = row[f'MACD_{params}']
+                        entry[f'MACDSignal_{params}'] = row[f'MACDSignal_{params}']
+                    elif indicator_name == 'Bollinger':
+                        entry[f'BollingerUpper_{params}'] = row[f'BollingerUpper_{params}']
+                        entry[f'BollingerLower_{params}'] = row[f'BollingerLower_{params}']
+                historical_entries.append(entry)
 
-            # Calculate the closing prices for the next y days
-            next_y_closing_prices = future_closing_prices[:self.PREDICTION_PERIOD]
-
-            # Extract Open, High, Low, and Volume for both historical and future data
-            historical_open = historical_data['Open'].tolist()
-            historical_high = historical_data['High'].tolist()
-            historical_low = historical_data['Low'].tolist()
-            historical_volume = historical_data['Volume'].tolist()
-
-            future_open = future_data['Open'].tolist()
-            future_high = future_data['High'].tolist()
-            future_low = future_data['Low'].tolist()
-            future_volume = future_data['Volume'].tolist()
+            # Prepare the future data entries
+            future_entries = [{'Date': row['Date'].strftime("%Y-%m-%d"), 'Close': row['Close']}
+                            for _, row in future_data.iterrows()]
 
             day_data = {
-                'Current Date': current_date,
-                'Historical Dates': [{'Date': date, 'SMA_14': sma_value, 'Open': open_val, 'High': high_val, 'Low': low_val, 'Volume': volume_val} 
-                                    for date, sma_value, open_val, high_val, low_val, volume_val in zip(historical_sma_dates, historical_sma_values, historical_open, historical_high, historical_low, historical_volume)],
-                'Future Dates': [{'Date': date, 'Close': closing_price, 'Open': open_val, 'High': high_val, 'Low': low_val, 'Volume': volume_val} 
-                                for date, closing_price, open_val, high_val, low_val, volume_val in zip(future_closing_dates, future_closing_prices, future_open, future_high, future_low, future_volume)],
-                'Target Prices': next_y_closing_prices  # Include target variable
+                'Current Date': current_date.strftime("%Y-%m-%d"),
+                'Historical Data': historical_entries,
+                'Future Data': future_entries,
+                'Target Prices': future_data['Close'].tolist()[:self.PREDICTION_PERIOD]
             }
 
-            # Ensure that the length of the 'Future Dates' list matches the prediction horizon (y)
-            if len(day_data['Target Prices']) == self.PREDICTION_PERIOD:
-                # print(f"Processed data for {current_date}")
-                return day_data
-            else:
-                return None
+            return day_data if len(day_data['Target Prices']) == self.PREDICTION_PERIOD else None
 
         except Exception as e:
             print(f"Error processing data for {current_date}: {str(e)}")
             return None
+
+    def extract_features_and_labels(self, processed_data, is_temporal_model):
+            features = []
+            labels = []
+
+            for day_data in processed_data:
+                historical_data = day_data['Historical Data']
+                
+                feature_vector = []
+                for row in historical_data:
+                    # Basic features: Open, High, Low, Close, Volume
+                    basic_features = [
+                        row['Open'], 
+                        row['High'], 
+                        row['Low'], 
+                        row['Volume'],
+                        row['Close']
+                    ]
+
+                    # Extracting technical indicators dynamically
+                    indicator_features = []
+                    for indicator_name, params in self.indicators:
+                        if indicator_name in ['SMA', 'EMA', 'RSI']:
+                            # Handle single parameter indicators
+                            indicator_key = f'{indicator_name}_{params}'
+                            indicator_features.append(row.get(indicator_key, 0))
+                        elif indicator_name == 'MACD':
+                            # Handle multi-parameter indicators like MACD
+                            macd_key = f'MACD_{params}'
+                            signal_key = f'MACDSignal_{params}'
+                            indicator_features.extend([
+                                row.get(macd_key, 0),
+                                row.get(signal_key, 0)
+                            ])
+                        elif indicator_name == 'Bollinger':
+                            upper_key = f'BollingerUpper_{params}'
+                            lower_key = f'BollingerLower_{params}'
+                            indicator_features.extend([
+                                row.get(upper_key, 0),
+                                row.get(lower_key, 0)
+                            ])
+                    
+                    # Combine basic and indicator features
+                    combined_features = basic_features + indicator_features
+                    feature_vector.append(combined_features)
+
+                # Flatten feature vector if the model is not temporal
+                if not is_temporal_model:
+                    feature_vector = [item for sublist in feature_vector for item in sublist]
+
+                features.append(feature_vector)
+                labels.append(day_data['Target Prices'][0])
+
+            print(f"[extract_features_and_labels] features: {len(features)}, labels: {len(labels)}")
+            return features, labels
 
     def process_days_concurrently(self):
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -1034,7 +1130,14 @@ class Pipeline2:
         return loaded_data
 
     def prep_data(self, dataset):
-        data_prep = DataPreparation(dataset)
+        indicators = [
+            ('SMA', 14), 
+            ('EMA', 10),
+            ('RSI', 14),
+            ('MACD', (12, 26, 9)),  # Note that MACD has three parameters
+            ('Bollinger', (20, 2))  # Bollinger Bands have two parameters
+        ]
+        data_prep = DataPreparation(dataset, indicators)
         data_structure = data_prep.process_days_concurrently()
         print(f"[prep_data] Prepared data structure length: {len(data_structure)}")
         return data_structure
@@ -1049,6 +1152,7 @@ class Pipeline2:
         prepped_data = [(stock_info, future.result()) for stock_info, future in prepped_data]
         return prepped_data
     
+
     def train_and_evaluate(self, stock_info, X_train, y_train, X_val, y_val, X_test, y_test):
         """Trains models and evaluates their performance on validation and test data."""
         symbol, _, _, _, _, model_builders = stock_info
@@ -1082,9 +1186,12 @@ class Pipeline2:
             r2_test = r2_score(y_test, test_predictions)
             mape_test = mean_absolute_percentage_error(y_test, test_predictions)
 
-            # Log or print the evaluation metrics
-            print(f"Validation MAE for {symbol}: {mae_val}, MSE: {mse_val}, R2: {r2_val}, MAPE: {mape_val}")
-            print(f"Test MAE for {symbol}: {mae_test}, MSE: {mse_test}, R2: {r2_test}, MAPE: {mape_test}")
+            # Log the evaluation metrics
+            logging.info(f"Validation metrics for {symbol} - MAE: {mae_val}, MSE: {mse_val}, R2: {r2_val}, MAPE: {mape_val}")
+            logging.info(f"Test metrics for {symbol} - MAE: {mae_test}, MSE: {mse_test}, R2: {r2_test}, MAPE: {mape_test}")
+
+            # Log the test predictions
+            logging.info(f"Test predictions for {symbol}: {test_predictions}")
 
             return test_predictions, mae_val, mae_test, mse_val, mse_test, r2_val, r2_test, mape_val, mape_test
 
@@ -1102,7 +1209,7 @@ class Pipeline2:
         labels = []
 
         for day_data in processed_data:
-            historical_data = day_data['Historical Dates']
+            historical_data = day_data['Historical Data']
             feature_vector = [[historical_datum['SMA_14'], historical_datum['Open'], 
                             historical_datum['High'], historical_datum['Low'], 
                             historical_datum['Volume']] 
@@ -1221,7 +1328,7 @@ class WalkForwardValidation:
     def extract_features_labels(self, data):
         # Define this method to appropriately extract features and labels from your data
         # This is just a placeholder and needs to be adapted based on your dataset
-        X = [item['Historical Dates'] for item in data]
+        X = [item['Historical Data'] for item in data]
         y = [item['Target Prices'] for item in data]
         return X, y
 

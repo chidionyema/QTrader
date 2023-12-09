@@ -1,0 +1,10 @@
+{
+    "google": {
+      "token_endpoint": "https://oauth2.googleapis.com/token",
+      "client_id": "YOUR_GOOGLE_CLIENT_ID",
+      "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
+      "redirect_uri": "YOUR_GOOGLE_REDIRECT_URI",
+      "userinfo_url" : "https://www.googleapis.com/oauth2/v1/userinfo"
+    }
+  }
+  

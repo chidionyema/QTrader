@@ -1,9 +1,11 @@
 from flask import logging
 from flask_mail import Mail, Message
-from app.engine import Pipeline2, OptimizerFactory, ModelBuilder, MappingLayer
+from app.engine import MODEL_REGISTRY, Pipeline2, OptimizerFactory, ModelBuilder
 from datetime import datetime
 from app import create_app, db, celery, mail, socketio
 from app.dbdata import TaskResult
+
+
 
 def convert_to_date_only(datetime_obj):
     if isinstance(datetime_obj, datetime):
@@ -32,30 +34,34 @@ def send_password_reset_email(email, reset_link):
 def train_model_task(self, configurations):
     with create_app().app_context():
         try:
-            all_results = []  # Storing all metrics
-            print(f"Processing {len(configurations)} configurations...")  # Debugging log
+            all_results = []
+            print(f"Processing {len(configurations)} configurations...")
 
             for config in configurations:
-                print(f"Processing configuration for symbol: {config['symbol']}")  # Debugging log
-                # Parsing dates and initializing model and optimizer
+                print(f"Processing configuration for symbol: {config['symbol']}")
                 symbol = config['symbol']
                 start_date = datetime.strptime(config['start_date'], "%Y-%m-%dT%H:%M:%S.%fZ")
                 end_date = datetime.strptime(config['end_date'], "%Y-%m-%dT%H:%M:%S.%fZ")
                 start_date_str = convert_to_date_only(start_date)
                 end_date_str = convert_to_date_only(end_date)
 
-                optimizer = OptimizerFactory.create_optimizer(config['optimizer_name'], param_grid={"n_estimators": [10, 50, 100]})
-                model_builders = []  # Initialize an empty list to store model_builder instances
+                model_builders = []
 
                 for model_name in config['model_name']:
-                    model_class = MappingLayer.models_mapping.get(model_name)
-                    if model_class:  # Check if model_class is not None
-                        model_builder = ModelBuilder(model_class, optimizer=optimizer)
-                        model_builders.append(model_builder)  # Append the model_builder to the list
+                    model_config = MODEL_REGISTRY.get(model_name)
+                    if model_config:  # Ensure model_config is not None
+                        model_class = model_config['class']
+                        param_grid = model_config['param_grid']
+                        optimizer_type = model_config['optimizer_type']
+                        if optimizer_type:
+                            param_grid = model_config.get('param_grid', {})  # Fetch the param_grid, provide a default if not present
+                            optimizer = OptimizerFactory.create_optimizer(optimizer_type, param_grid=param_grid)
+                        else:
+                            optimizer = None  
+                        
+                        model_builder = ModelBuilder(model_class, optimizer)
+                        model_builders.append(model_builder)
 
-                # Now model_builders contains all the model_builder instances for the model names in config['model_name']
-                # You can use this list of model_builders as needed in your program
-          
                 stocks_info = [(symbol, start_date_str, end_date_str, 14, 3, model_builders)]
                 pipeline = Pipeline2(stocks_info)
                 predictions = pipeline.process_data_pipeline()

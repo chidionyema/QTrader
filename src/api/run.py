@@ -1,6 +1,7 @@
 # from gevent import monkey
 # monkey.patch_all()
 
+from ctypes.wintypes import HPALETTE
 import json
 import eventlet
 eventlet.monkey_patch(socket=True, select=True)
@@ -90,11 +91,71 @@ def load_json_data(file_path):
 # Import caching extension and initialize it
 from flask_caching import Cache
 cache = Cache(app)
+from hyperopt import hp
 
 # Caching configuration (adjust cache_timeout as needed)
 app.config['CACHE_TYPE'] = 'simple'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 3600  # Cache for 1 hour
+optimizer_parameter_mapping = {
+    "GridSearch": {
+        "param_grid": {
+            "description": "Dictionary with parameters names as keys and lists of parameter settings to try as values",
+            "default": {"param1": [1, 10], "param2": [0.01, 0.1]}
+        },
+        "additional_params": {
+            "description": "Any additional parameters specific to GridSearch",
+            "default": {}
+        }
+    },
+    "RandomSearchOptimizer": {
+        "param_distributions": {
+            "description": "Dictionary with parameter names as keys and distributions or lists of parameters to try",
+            "default": {"param1": [1, 10], "param2": [0.01, 0.1]}
+        },
+        "n_iter": {
+            "description": "Number of parameter settings that are sampled",
+            "default": 100
+        }
+    },
+    "BayesianOptimizer": {
+        "param_space": {
+            "description": "Dictionary defining the search space",
+            "default": {"param1": (1, 10), "param2": (0.01, 0.1)}
+        },
+        "n_iter": {
+            "description": "Number of iterations to run",
+            "default": 50
+        }
+    },
+    # Add similar structure for other optimizers
+    "PSOOptimizer": {
+        "param1": {
+            "description": "Description and default value of parameter 1 for PSOOptimizer",
+            "default": "example_value1"
+        },
+        "param2": {
+            "description": "Description and default value of parameter 2 for PSOOptimizer",
+            "default": "example_value2"
+        }
+        # Add other specific parameters for PSOOptimizer
+    },
+    "SimulatedAnnealingOptimizer": {
+        # Define parameters and defaults for SimulatedAnnealingOptimizer
+    },
+    "TPEOptimizer": {
+        "space": {
+            "description": "Search space definition using hyperopt's hp module",
+            "default": {"param1": hp.uniform('param1', 0, 1)}
+        }
+    },
+    # Continue with other optimizers...
+}
 
+
+@app.route('/fetch_optimizer_params', methods=['GET'])
+def fetch_optimizer_params():
+    # Return the optimizer_parameter_mapping as a JSON response
+    return jsonify(optimizer_parameter_mapping)
 
 @app.route('/fetch_model_categories', methods=['GET'])
 @cache.cached()  # Cache the response
